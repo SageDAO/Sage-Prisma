@@ -1,0 +1,198 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_CONNECTION_POOL_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model Collection {
+  id                               Int         @id @default(autoincrement())
+  primarySplitterId                Int?
+  secondarySplitterId              Int?
+  whitelistId                      Int?
+  createdAt                        DateTime    @default(now())
+  royaltyPercentage                Float       @default(0.0)
+  artistAddress                    String      @db.Char(42)
+  approvedAt                       DateTime?
+  approvedBy                       String?     @db.Char(42)
+  bannerImageS3Path                String
+  collectionMetadataCid            String
+  description                      String
+  metadataS3Path                   String
+  name                             String
+  tags                             String
+  User_Collection_approvedByToUser User?       @relation("Collection_approvedByToUser", fields: [approvedBy], references: [walletAddress])
+  Artist                           User        @relation("ArtistCollections", fields: [artistAddress], references: [walletAddress])
+  PrimarySplitter                  Splitter?   @relation("primarySplitter", fields: [primarySplitterId], references: [id])
+  SecondarySplitter                Splitter?   @relation("secondarySplitter", fields: [secondarySplitterId], references: [id])
+  Whitelist                        Whitelist?  @relation(fields: [whitelistId], references: [id])
+  Auction                          Auction?
+  DirectMint                       DirectMint?
+  Lottery                          Lottery?
+  Nfts                             Nft[]
+  User_userFavoriteDrops           User[]      @relation("userFavoriteDrops")
+}
+
+model SplitEntry {
+  id                 Int      @id @default(autoincrement())
+  destinationAddress String   @db.Char(42)
+  splitterId         Int
+  percent            Float
+  Splitter           Splitter @relation(fields: [splitterId], references: [id])
+}
+
+model Splitter {
+  id                     Int          @id @default(autoincrement())
+  splitterAddress        String?      @db.Char(42)
+  CollectionsAsPrimary   Collection[] @relation("primarySplitter")
+  CollectionsAsSecondary Collection[] @relation("secondarySplitter")
+  SplitterEntries        SplitEntry[]
+}
+
+model WhitelistEntry {
+  id          Int           @id @default(autoincrement())
+  whitelistId Int
+  minBalance  String?
+  tokenId     BigInt?
+  type        WhitelistType
+  Whitelist   Whitelist     @relation(fields: [whitelistId], references: [id])
+}
+
+model Whitelist {
+  id               Int              @id @default(autoincrement())
+  contractAddress  String           @db.Char(42)
+  Collections      Collection[]
+  WhitelistEntries WhitelistEntry[]
+}
+
+model Auction {
+  collectionId          Int        @id
+  ERC20Address          String     @db.Char(42)
+  buyNowPrice           String?
+  contractDataFetchedAt DateTime?
+  endTime               DateTime
+  minimumPrice          String?
+  nftId                 Int
+  settled               Boolean
+  startTime             DateTime
+  Collection            Collection @relation(fields: [collectionId], references: [id])
+}
+
+model Nft {
+  id            Int          @id @default(autoincrement())
+  name          String
+  description   String
+  rarity        String
+  ipfsPath      String
+  s3Path        String
+  tags          String
+  numberOfMints Int          @default(0)
+  isVideo       Boolean      @default(false)
+  collectionId  Int
+  Collection    Collection   @relation(fields: [collectionId], references: [id])
+  Lottery       Lottery[]
+  PrizeProof    PrizeProof[]
+}
+
+model PrizeProof {
+  winnerAddress String    @db.Char(42)
+  proof         String
+  claimedAt     DateTime?
+  createdAt     DateTime
+  nftId         Int
+  collectionId  Int
+  Nft           Nft       @relation(fields: [nftId], references: [id])
+  @@id([collectionId, winnerAddress, nftId])
+}
+
+model MemeTransactions {
+  blockNumber    Int
+  blockTimestamp Int
+  from           String    @db.Char(42)
+  to             String    @db.Char(42)
+  value          String
+  assetType      AssetType
+  id             Int       @id @default(autoincrement())
+  txHash         String    @db.Char(66)
+  @@index([from, to])
+}
+
+model EarnedPoints {
+  address           String   @id @db.Char(42)
+  totalPointsEarned BigInt   @default(0)
+  proof             String
+  updatedAt         DateTime @default(now())
+  User              User     @relation(fields: [address], references: [walletAddress])
+}
+
+model RewardType {
+  type               AssetType @id
+  rewardRate         Float
+  lastBlockInspected Int
+  chainId            Int
+  contract           String    @db.Char(42)
+  startingBlock      Int
+  positionSizeLimit  String    @default("0")
+}
+
+model User {
+  walletAddress                          String       @id @db.Char(42)
+  email                                  String?      @unique
+  createdAt                              DateTime     @default(now())
+  role                                   Role         @default(USER)
+  bio                                    String?      @db.VarChar(200)
+  profilePicture                         String?
+  username                               String?
+  EarnedPoints                           EarnedPoints?
+  Collection_Collection_approvedByToUser Collection[] @relation("Collection_approvedByToUser")
+  ArtistCollections                      Collection[] @relation("ArtistCollections")
+  Collection_userFavoriteDrops           Collection[] @relation("userFavoriteDrops")
+  @@index([walletAddress])
+}
+
+model DirectMint {
+  collectionId Int        @id
+  mintCost     String
+  startTime    DateTime
+  endTime      DateTime
+  Collection   Collection @relation(fields: [collectionId], references: [id])
+}
+
+model Lottery {
+  collectionId        Int        @id
+  blockchainCreatedAt DateTime?
+  costPerTicketCoins  Float      @default(0.0)
+  costPerTicketPoints Int        @default(0)
+  defaultPrizeId      Int?
+  isLive              Boolean    @default(false)
+  maxParticipants     Int        @default(0)
+  finished            Boolean    @default(false)
+  endTime             Int
+  startTime           Int
+  Collection          Collection @relation(fields: [collectionId], references: [id])
+  Nft                 Nft?       @relation(fields: [defaultPrizeId], references: [id])
+}
+
+enum AssetType {
+  ETH_MEMEINU
+  FTM_MEMEINU
+  FTM_LIQUIDITY
+}
+
+enum Role {
+  USER
+  ARTIST
+  ADMIN
+}
+
+enum WhitelistType {
+  WALLET
+  ERC20
+  ERC721
+  ERC1155
+  MERKLE
+}
